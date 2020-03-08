@@ -11,8 +11,8 @@ if __name__ == '__main__':
     mat = sys.argv[1]
     num = int(sys.argv[2])
 
-    carrier_name = f'../carriers/{mat}/{num}.csv'
-    measure_name = f'../measures/{mat}/{num}.csv'
+    carrier_name = f'../data/carriers/{mat}/{num}.csv'
+    measure_name = f'../data/measures/{mat}/{num}.csv'
 
     for fname in [carrier_name, measure_name]:
         if not os.path.exists(fname):
