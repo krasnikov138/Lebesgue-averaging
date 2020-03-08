@@ -1,0 +1,6 @@
+run/*
+!run/*.cpp
+!run/*.py
+carriers/
+materials/
+measures/
