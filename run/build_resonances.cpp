@@ -1,8 +1,6 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
-#include <tuple>
-#include <list>
 #include <fstream>
 #include <cmath>
 #include <filesystem>
@@ -52,15 +50,15 @@ void Spectrum::load(std::string file_name) {
 }
 
 void Spectrum::save(std::string file_name) {
-	std::ofstream output(file_name);
-	for (int i = 0; i < size; i++)
-		output << e[i] << ' ' << cs[i] << '\n';
+    std::ofstream output(file_name);
+    for (int i = 0; i < size; i++)
+        output << e[i] << ' ' << cs[i] << '\n';
 }
 
 double Spectrum::get_energy(double point) {
     int i = static_cast<int>(point);
-	if (i + 1 >= size) 
-		return e.back();
+    if (i + 1 >= size) 
+        return 0.0;
     double ratio = point - i;
     return ratio * e[i + 1] + (1 - ratio) * e[i];
 }
@@ -73,8 +71,8 @@ double Spectrum::get_point(double energy, int index) {
 }
 
 double Spectrum::get_cs(int i, double ratio) {
-	if (i + 1 >= size) 
-		return cs.back();
+    if (i + 1 >= size) 
+        return 0.0;
     return ratio * cs[i + 1] + (1 - ratio) * cs[i];
 }
 
@@ -85,8 +83,8 @@ double Spectrum::get_cs(double point) {
 }
 
 double Spectrum::linear(double energy, int i) {
-	if (i + 1 >= size) 
-		return cs.back();
+    if (i + 1 >= size) 
+        return 0.0;
     double ratio = (energy - e[i]) / (e[i + 1] - e[i]);
     return get_cs(i, ratio);
 }
@@ -121,13 +119,13 @@ int find_dominant_mat(std::vector<Spectrum> &spectra, std::vector<bool> &mask, i
     int index_max = -1;
     double cs_max = 0.0;
     for (int i = 0; i < spectra.size(); i++) {
-    	if (!mask[i])
-    		continue;
+        if (!mask[i])
+            continue;
         double cs;
         if (e > 0 )
-        	cs = spectra[i].linear(e, offset);
+            cs = spectra[i].linear(e, offset);
         else
-        	cs = spectra[i].e[offset];
+            cs = spectra[i].e[offset];
         if (cs_max < cs) {
             index_max = i;
             cs_max = cs;
@@ -137,58 +135,58 @@ int find_dominant_mat(std::vector<Spectrum> &spectra, std::vector<bool> &mask, i
 }
 
 void set_union_grid(std::vector<Spectrum> &spectra) {
-	std::vector<double> grid;
-	size_t max_size = 0;
-	for (const auto& spec: spectra)
-		max_size = (max_size < spec.size)? spec.size : max_size;
-	grid.reserve(max_size);
+    std::vector<double> grid;
+    size_t max_size = 0;
+    for (const auto& spec: spectra)
+        max_size = (max_size < spec.size)? spec.size : max_size;
+    grid.reserve(max_size);
 
-	std::vector<int> offsets(spectra.size(), 0);
-	while (true) {
-		double e = -1.0;
-		for (int i = 0; i < spectra.size(); i++) {
-			if (offsets[i] < spectra[i].size && (e < 0 || spectra[i].e[offsets[i]] < e))
-				e = spectra[i].e[offsets[i]];
-		}
-		if (e > 0) {
-			grid.push_back(e);
-			/* skip points equal to e */
-			for (int i = 0; i < spectra.size(); i++) {
-				if (offsets[i] < spectra[i].size && is_close(e, spectra[i].e[offsets[i]]))
-					offsets[i]++;
-			}
-		} else
-			break;
-	}
+    std::vector<int> offsets(spectra.size(), 0);
+    while (true) {
+        double e = -1.0;
+        for (int i = 0; i < spectra.size(); i++) {
+            if (offsets[i] < spectra[i].size && (e < 0 || spectra[i].e[offsets[i]] < e))
+                e = spectra[i].e[offsets[i]];
+        }
+        if (e > 0) {
+            grid.push_back(e);
+            /* skip points equal to e */
+            for (int i = 0; i < spectra.size(); i++) {
+                if (offsets[i] < spectra[i].size && is_close(e, spectra[i].e[offsets[i]]))
+                    offsets[i]++;
+            }
+        } else
+            break;
+    }
 
-	/* count cross sections on union grid */
-	for (int i = 0; i < spectra.size(); i++) {
-		int offset = 0;
-		std::vector<double> cs;
-		cs.reserve(grid.size());
+    /* count cross sections on union grid */
+    for (int i = 0; i < spectra.size(); i++) {
+        int offset = 0;
+        std::vector<double> cs;
+        cs.reserve(grid.size());
 
-		/* before main part */
-		while (grid[offset] < spectra[i].e[0]) {
-			cs.push_back(0.0);
-			offset++;
-		}
+        /* before main part */
+        while (grid[offset] < spectra[i].e[0]) {
+            cs.push_back(0.0);
+            offset++;
+        }
 
-		/* main part */
-		for (int j = 0; j < spectra[i].size - 1; j++) {
-			while (grid[offset] < spectra[i].e[j + 1])
-				cs.push_back(spectra[i].linear(grid[offset++], j));
-		}
-		/* after main part */
-		for (; offset < grid.size(); offset++)
-			cs.push_back(0.0);
-		spectra[i].cs = cs;
-		spectra[i].e = grid;
-		spectra[i].size = grid.size();
-	}
+        /* main part */
+        for (int j = 0; j < spectra[i].size - 1; j++) {
+            while (grid[offset] < spectra[i].e[j + 1])
+                cs.push_back(spectra[i].linear(grid[offset++], j));
+        }
+        /* after main part */
+        for (; offset < grid.size(); offset++)
+            cs.push_back(0.0);
+        spectra[i].cs = cs;
+        spectra[i].e = grid;
+        spectra[i].size = grid.size();
+    }
 }
 
 std::vector<std::vector<Carrier>> build_carriers(std::vector<Spectrum> &spectra, 
-	double start_energy = 1e-5, double K = 0.1) {
+    double start_energy = 1e-5, double K = 0.1) {
 
     std::vector<std::vector<Carrier>> carriers(spectra.size());
 
@@ -198,62 +196,62 @@ std::vector<std::vector<Carrier>> build_carriers(std::vector<Spectrum> &spectra,
     int index = 0;
     std::vector<double>& grid = spectra[0].e;
     while (grid[index] < start_energy)
-    	index++;
+        index++;
     index--;
 
     double left = start_energy;
     while (index < grid.size()) {
-    	double right = (1 + K / 2) / (1 - K / 2) * left;
+        double right = (1 + K / 2) / (1 - K / 2) * left;
 
-    	std::vector<Carrier> stage(spectra.size());
-    	std::vector<bool> mask(spectra.size(), false);
-    	// count volatility
-    	for (int i = 0; i < spectra.size(); i++) {
-    		int j = index;
-    		double cs_mean = 0, cs_sq_mean = 0;
-    		while (j < grid.size() && grid[j] < right) {
-    			cs_mean += spectra[i].cs[j];
-    			cs_sq_mean += pow(spectra[i].cs[j], 2);
-    			j++;
-    		}
-    		cs_mean /= (j - index);
-    		cs_sq_mean /= (j - index);
-    		if (cs_sq_mean / cs_mean - 1 > 0.2)
-    			mask[i] = true;
-    	}
-    	if (std::all_of(mask.begin(), mask.end(), [](bool el){return !el;})) 
-    		mask = std::vector<bool>(spectra.size(), true);
-    	prev_mat = find_dominant_mat(spectra, mask, index, left);
-    	prev_point = spectra[prev_mat].get_point(left, index++);
-    	while (index < grid.size() && grid[index] < right) {
-    		mat = find_dominant_mat(spectra, mask, index);
-    		if (mat == prev_mat)
-    			stage[mat].push_back(Segment(prev_point, index));
-    		else {
-    			// find intersection
-    			double ypl = spectra[prev_mat].get_cs(prev_point);
-    			double ypr = spectra[prev_mat].cs[index];
-    			double yl = spectra[mat].get_cs(prev_point);
-    			double yr = spectra[mat].cs[index];
-    			double intersect = (yl - ypl) / ((ypr - ypl) - (yr - yl)) * (index - prev_point) + prev_point;
+        std::vector<Carrier> stage(spectra.size());
+        std::vector<bool> mask(spectra.size(), false);
+        // count volatility
+        for (int i = 0; i < spectra.size(); i++) {
+            int j = index;
+            double cs_mean = 0, cs_sq_mean = 0;
+            while (j < grid.size() && grid[j] < right) {
+                cs_mean += spectra[i].cs[j];
+                cs_sq_mean += pow(spectra[i].cs[j], 2);
+                j++;
+            }
+            cs_mean /= (j - index);
+            cs_sq_mean /= (j - index);
+            if (cs_sq_mean / cs_mean - 1 > 0.2)
+                mask[i] = true;
+        }
+        if (std::all_of(mask.begin(), mask.end(), [](bool el){return !el;})) 
+            mask = std::vector<bool>(spectra.size(), true);
+        prev_mat = find_dominant_mat(spectra, mask, index, left);
+        prev_point = spectra[prev_mat].get_point(left, index++);
+        while (index < grid.size() && grid[index] < right) {
+            mat = find_dominant_mat(spectra, mask, index);
+            if (mat == prev_mat)
+                stage[mat].push_back(Segment(prev_point, index));
+            else {
+                // find intersection
+                double ypl = spectra[prev_mat].get_cs(prev_point);
+                double ypr = spectra[prev_mat].cs[index];
+                double yl = spectra[mat].get_cs(prev_point);
+                double yr = spectra[mat].cs[index];
+                double intersect = (yl - ypl) / ((ypr - ypl) - (yr - yl)) * (index - prev_point) + prev_point;
 
-    			stage[prev_mat].push_back(Segment(prev_point, intersect));
-    			stage[mat].push_back(Segment(intersect, index));
-    		}
-    		prev_mat = mat;
-    		prev_point = index;
-    		index++;
-    	}
-    	// write result in carriers;
-    	for (int i = 0; i < spectra.size(); i++) {
-    		if (!stage[i].empty())
-    			carriers[i].push_back(std::move(stage[i]));
-    	}
-    	// if not last point shift index before right for next stage
-    	if (index < grid.size()) {
-    		left = right;
-    		index--;
-    	}
+                stage[prev_mat].push_back(Segment(prev_point, intersect));
+                stage[mat].push_back(Segment(intersect, index));
+            }
+            prev_mat = mat;
+            prev_point = index;
+            index++;
+        }
+        // write result in carriers;
+        for (int i = 0; i < spectra.size(); i++) {
+            if (!stage[i].empty())
+                carriers[i].push_back(std::move(stage[i]));
+        }
+        // if not last point shift index before right for next stage
+        if (index < grid.size()) {
+            left = right;
+            index--;
+        }
     }
     return carriers;
 }
@@ -298,7 +296,7 @@ int main(int argc, char** argv) {
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
     args::ValueFlag<double> k_arg(parser, "K", "Set K value - relative width of carriers.", {'k', "width"});
     args::ValueFlag<double> start_energy_arg(parser, "start-energy", 
-    	"Set the left border of first carrier", {'s', "start"});
+        "Set the left border of first carrier", {'s', "start"});
     args::ValueFlag<std::string> path_arg(parser, "path", 
         "Path for searching input materials / writing output values. Default value is ./", {'p', "path"});
 
