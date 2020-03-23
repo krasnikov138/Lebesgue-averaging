@@ -1,8 +1,10 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <tuple>
 #include <fstream>
 #include <cmath>
+#include <cassert>
 #include <filesystem>
 #include <algorithm>
 
@@ -57,7 +59,7 @@ void Spectrum::save(std::string file_name) {
 
 double Spectrum::get_energy(double point) {
     int i = static_cast<int>(point);
-    if (i + 1 >= size) 
+    if (i + 1 >= size)
         return 0.0;
     double ratio = point - i;
     return ratio * e[i + 1] + (1 - ratio) * e[i];
@@ -71,7 +73,7 @@ double Spectrum::get_point(double energy, int index) {
 }
 
 double Spectrum::get_cs(int i, double ratio) {
-    if (i + 1 >= size) 
+    if (i + 1 >= size)
         return 0.0;
     return ratio * cs[i + 1] + (1 - ratio) * cs[i];
 }
@@ -83,7 +85,7 @@ double Spectrum::get_cs(double point) {
 }
 
 double Spectrum::linear(double energy, int i) {
-    if (i + 1 >= size) 
+    if (i + 1 >= size)
         return 0.0;
     double ratio = (energy - e[i]) / (e[i + 1] - e[i]);
     return get_cs(i, ratio);
@@ -115,7 +117,7 @@ bool is_less(double a, double b, double rel_tol=1e-8) {
     return false;
 }
 
-int find_dominant_mat(std::vector<Spectrum> &spectra, std::vector<bool> &mask, int offset, double e = -1.0) {
+int find_dominant_mat(std::vector<Spectrum> &spectra, std::vector<bool> &mask, int index, double e = -1.0) {
     int index_max = -1;
     double cs_max = 0.0;
     for (int i = 0; i < spectra.size(); i++) {
@@ -123,9 +125,9 @@ int find_dominant_mat(std::vector<Spectrum> &spectra, std::vector<bool> &mask, i
             continue;
         double cs;
         if (e > 0 )
-            cs = spectra[i].linear(e, offset);
+            cs = spectra[i].linear(e, index);
         else
-            cs = spectra[i].e[offset];
+            cs = spectra[i].cs[index];
         if (cs_max < cs) {
             index_max = i;
             cs_max = cs;
@@ -200,7 +202,8 @@ std::vector<std::vector<Carrier>> build_carriers(std::vector<Spectrum> &spectra,
     index--;
 
     double left = start_energy;
-    while (index < grid.size()) {
+    while (index < grid.size() ) {
+        assert(grid[index] < left);
         double right = (1 + K / 2) / (1 - K / 2) * left;
 
         std::vector<Carrier> stage(spectra.size());
@@ -222,18 +225,24 @@ std::vector<std::vector<Carrier>> build_carriers(std::vector<Spectrum> &spectra,
         if (std::all_of(mask.begin(), mask.end(), [](bool el){return !el;})) 
             mask = std::vector<bool>(spectra.size(), true);
         prev_mat = find_dominant_mat(spectra, mask, index, left);
-        prev_point = spectra[prev_mat].get_point(left, index++);
+        prev_point = spectra[prev_mat].get_point(left, index++) * (1 - 1e-5);
         while (index < grid.size() && grid[index] < right) {
             mat = find_dominant_mat(spectra, mask, index);
+            if (mat == -1) {
+                index = grid.size();
+                break;
+            }
             if (mat == prev_mat)
                 stage[mat].push_back(Segment(prev_point, index));
             else {
-                // find intersection
                 double ypl = spectra[prev_mat].get_cs(prev_point);
                 double ypr = spectra[prev_mat].cs[index];
                 double yl = spectra[mat].get_cs(prev_point);
                 double yr = spectra[mat].cs[index];
-                double intersect = (yl - ypl) / ((ypr - ypl) - (yr - yl)) * (index - prev_point) + prev_point;
+
+                double intersect = ((yl - ypl) * index + (ypr - yr) * prev_point) / (yl - ypl + ypr - yr);
+                assert(intersect >= prev_point);
+                assert(intersect <= index);
 
                 stage[prev_mat].push_back(Segment(prev_point, intersect));
                 stage[mat].push_back(Segment(intersect, index));
@@ -335,7 +344,7 @@ int main(int argc, char** argv) {
     std::vector<std::vector<Carrier>> res = build_carriers(spectra, start_energy, K);
 
     fs::path carriers_dir = path / "carriers";
-    /* write carriers in files */
+    // write carriers in files 
     fs::remove_all(carriers_dir);
     for (int i = 0; i < res.size(); i++) {
         fs::create_directories(carriers_dir / spectra[i].name);
