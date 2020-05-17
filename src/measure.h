@@ -1,7 +1,7 @@
 #include "spectrum.h"
 #include "resonances.h"
 
-#ifndef	MEASURE
+#ifndef MEASURE
 #define MEASURE
 
 //class adapter
@@ -9,7 +9,7 @@ class Measure {
     const Spectrum& spectr;
     const Carrier& carrier;
 public:
-	// capture spectr and carrier with resonances for further calculations
+    // capture spectr and carrier with resonances for further calculations
     Measure(const Spectrum& spectr, const Carrier& carrier): spectr(spectr), carrier(carrier) {};
 
     double operator()(double cs) const;
