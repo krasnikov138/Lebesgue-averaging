@@ -5,6 +5,8 @@
 #include <optional>
 #include <algorithm>
 
+#include "endf.h"
+
 #ifndef SPECTRUM
 #define SPECTRUM
 
@@ -20,6 +22,7 @@ struct LinearGrid: public std::vector<double> {
     double get_point(double value, std::optional<unsigned int> hint = {}) const;
 
     LinearGrid& operator=(const std::vector<double>& obj);
+    LinearGrid& operator=(std::vector<double>&& obj);
 };
 
 LinearGrid linspace(double left, double right, size_t points);
@@ -36,8 +39,9 @@ public:
     Spectrum(std::string name, double concentration = 1.0): 
         name(name), size(0), concentration(concentration) {};
 
-    void load(std::string file_name);
-    void save(std::string file_name) const;
+    void load(const std::string& file_name);
+    void load(CrossSectionData&& endf_data);
+    void save(const std::string& file_name) const;
 
     // access values via ratio point or energy point
     inline double get_e(double point) const {return e.get_value(point);};

@@ -6,6 +6,7 @@
 #include "resonances.h"
 #include "measure.h"
 #include "config_parser.h"
+#include "endf.h"
 
 /* use convinient lib for parsing command line */
 #include <args.hxx>
@@ -48,6 +49,17 @@ std::vector<Spectrum> load_spectra(const std::string& config_name, const fs::pat
     return spectra;
 }
 
+void load_distribution(const std::string& fname) {
+    EndfFile endf(fname);
+
+    std::unique_ptr<EndfData> data = endf.get_section(6, 5);
+    if (data) {
+        auto& distr = *(reinterpret_cast<EnergyAngleData*>(data.get()));
+        std::cout << distr;
+    }
+    exit(0);
+}
+
 int main(int argc, char** argv) {
     /* read command lines arguments */
     args::ArgumentParser argparser("Splitting the spectrs on carriers of resonances.");
@@ -61,6 +73,8 @@ int main(int argc, char** argv) {
     args::ValueFlag<std::string> config_arg(argparser, "config", 
         "Set name of config file. This file includes parameters of materials "
         "like concentration and some others. Default file is 'materials.conf'.", {"config"});
+    args::ValueFlag<std::string> distr_fname_arg(argparser, "distribution", 
+        "File with energy-angle distribution.", {"distr-fname"});
 
     try {
         argparser.ParseCLI(argc, argv);
@@ -84,6 +98,11 @@ int main(int argc, char** argv) {
     std::string config_name("materials.conf");
     if (config_arg)
         config_name = args::get(config_arg);
+
+    /*
+    if (distr_fname_arg)
+        load_distribution(args::get(distr_fname_arg));
+    */
 
     auto spectra = load_spectra(config_name, path);
     set_union_grid(spectra);

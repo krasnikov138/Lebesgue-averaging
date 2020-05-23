@@ -53,6 +53,11 @@ LinearGrid& LinearGrid::operator=(const std::vector<double>& obj) {
     return *this;
 }
 
+LinearGrid& LinearGrid::operator=(std::vector<double>&& obj) {
+    std::vector<double>::operator=(std::move(obj));
+    return *this;
+}
+
 LinearGrid linspace(double left, double right, size_t points) {
     assert(points > 2);
 
@@ -64,18 +69,28 @@ LinearGrid linspace(double left, double right, size_t points) {
     return grid;
 }
 
-void Spectrum::load(std::string file_name) {
-    std::ifstream input(file_name);
-    double e_val, cs_val;
-    while (input) {
-        input >> e_val >> cs_val;
-        e.push_back(e_val);
-        cs.push_back(cs_val * concentration);
-    }
+void Spectrum::load(const std::string& file_name) {
+    EndfFile endf(file_name);
+
+    std::unique_ptr<EndfData> data = endf.get_section(3, 1);
+    if (data) {
+        auto& spectr = *(reinterpret_cast<CrossSectionData*>(data.get()));
+        load(std::move(spectr));
+    } else
+        throw std::runtime_error("File '" + file_name + 
+            "'' doesn't contain total cross section part.");
+}
+
+void Spectrum::load(CrossSectionData&& endf_data) {
+    e = std::move(endf_data.energies);
+    cs = std::move(endf_data.cross_sections);
+
+    for (auto& el: cs)
+        el *= concentration;
     size = e.size();
 }
 
-void Spectrum::save(std::string file_name) const {
+void Spectrum::save(const std::string& file_name) const {
     std::ofstream output(file_name);
     for (int i = 0; i < size; i++)
         output << e[i] << ' ' << cs[i] << '\n';
