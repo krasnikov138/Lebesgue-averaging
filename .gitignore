@@ -6,3 +6,7 @@ run/*
 carriers/
 materials/
 measures/
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CMakeCache.txt
