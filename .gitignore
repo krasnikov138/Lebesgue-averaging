@@ -3,6 +3,7 @@ run/*
 !run/*.py
 !run/*.hpp
 !run/*.h
+!run/*.conf
 carriers/
 materials/
 measures/
