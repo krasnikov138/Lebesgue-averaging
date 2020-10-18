@@ -1,19 +1,4 @@
-#include <iostream>
-#include <map>
-#include "yaml-cpp/yaml.h"
-
-struct MaterialInfo {
-    double concentration;
-    std::string cross_section_file;
-
-    MaterialInfo(double conc = 1.0, const std::string& cross_section_file = ""):
-    	concentration(conc), cross_section_file(cross_section_file) {}
-    
-    MaterialInfo(const YAML::Node& node) {
-    	concentration = node["concentration"].as<double>();
-    	cross_section_file = node["cross_section_file"].as<std::string>();
-    }
-};
+#include "yaml_config_parser.h"
 
 std::map<std::string, MaterialInfo> load_yaml_config(const std::string& fname) {
 	YAML::Node doc = YAML::LoadFile(fname);
@@ -37,14 +22,4 @@ std::map<std::string, MaterialInfo> load_yaml_config(const std::string& fname) {
 	}
 
     return res;
-}
-
-int main() {
-	const std::string test_file_name = "materials.yaml";
-	std::map<std::string, MaterialInfo> config = load_yaml_config(test_file_name);
-
-	for (const auto& [name, info]: config) {
-		std::cout << name << " " << info.concentration << " " << info.cross_section_file << '\n';
-	}
-	return 0;
 }

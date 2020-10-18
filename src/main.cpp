@@ -5,7 +5,7 @@
 
 #include "resonances.h"
 #include "measure.h"
-#include "config_parser.h"
+#include "yaml_config_parser.h"
 #include "endf.h"
 
 /* use convinient lib for parsing command line */
@@ -13,37 +13,18 @@
 
 namespace fs = std::filesystem;
 
-std::vector<Spectrum> load_spectra(const std::string& config_name, const fs::path& path) {
-    ConfigParser config_parser;
-    auto info = config_parser.load(config_name);
+std::vector<Spectrum> load_spectra(const std::string& config_name) {
+    std::map<std::string, MaterialInfo> config = load_yaml_config(config_name);
 
     // load all files from material directory
     std::vector<Spectrum> spectra;
-
-    fs::path std_dir = path / "materials";
-    for (auto& [name, values]: info) {
-        double concentration;
-        std::string cross_section_file;
-        if (auto iter = values.find("concentration"); iter != values.end()) {
-            try {
-                concentration = std::stod(iter->second);
-            } catch (std::invalid_argument& exp) {
-                throw std::runtime_error("Can't convert '" + iter->second + "' to double in config file.");
-            }
-        } else 
-            throw std::runtime_error("For material '" + name + "' concentration is required.");
-
-        if (auto iter = values.find("cross_section_file"); iter != values.end()) 
-            cross_section_file = iter->second;
-        else 
-            cross_section_file = std_dir / name;
-
-        if (fs::exists(cross_section_file)) {
-            Spectrum sp(name, concentration);
-            sp.load(cross_section_file);
+    for (auto& [name, values]: config) {
+        if (fs::exists(values.cross_section_file)) {
+            Spectrum sp(name, values.concentration);
+            sp.load(values.cross_section_file);
             spectra.push_back(sp);
         } else
-            throw std::runtime_error("File '" + cross_section_file + "' doesn't exist.");
+            throw std::runtime_error("File '" + values.cross_section_file + "' doesn't exist.");
     }
 
     return spectra;
@@ -72,7 +53,7 @@ int main(int argc, char** argv) {
         "Default value is current directory.", {'p', "path"});
     args::ValueFlag<std::string> config_arg(argparser, "config", 
         "Set name of config file. This file includes parameters of materials "
-        "like concentration and some others. Default file is 'materials.conf'.", {"config"});
+        "like concentration and some others. Default file is 'materials.yaml'.", {"config"});
     args::ValueFlag<std::string> distr_fname_arg(argparser, "distribution", 
         "File with energy-angle distribution.", {"distr-fname"});
 
@@ -95,7 +76,7 @@ int main(int argc, char** argv) {
     fs::path path(".");
     if (path_arg)
         path = fs::path(args::get(path_arg));
-    std::string config_name("materials.conf");
+    std::string config_name("materials.yaml");
     if (config_arg)
         config_name = args::get(config_arg);
 
@@ -104,7 +85,7 @@ int main(int argc, char** argv) {
         load_distribution(args::get(distr_fname_arg));
     */
 
-    auto spectra = load_spectra(config_name, path);
+    auto spectra = load_spectra(config_name);
     set_union_grid(spectra);
     std::vector<std::vector<Carrier>> res = build_carriers(spectra, start_energy, K);
 

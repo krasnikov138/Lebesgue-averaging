@@ -9,6 +9,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/run)
 file(GLOB SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
 add_executable(main ${SOURCES})
 
-# add_subdirectory(libs/yaml-cpp/build)
-# add_executable(yaml_config_parser "${CMAKE_SOURCE_DIR}/src/yaml_config_parser.cpp")
-# target_link_libraries(yaml_config_parser PRIVATE yaml-cpp)
+add_library(yaml-cpp STATIC IMPORTED)
+set_target_properties(yaml-cpp PROPERTIES 
+	IMPORTED_LOCATION libs/yaml-cpp/lib64/libyaml-cpp.a
+	INCLUDE_DIRECTORIES libs/yaml-cpp/include
+)
+target_link_libraries(main PRIVATE yaml-cpp)

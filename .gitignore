@@ -11,3 +11,4 @@ CMakeFiles/
 cmake_install.cmake
 Makefile
 CMakeCache.txt
+libs/yaml-cpp
