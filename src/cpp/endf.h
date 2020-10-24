@@ -83,9 +83,9 @@ class EndfFile {
     unsigned int line_number;
     unsigned int cur_mf, cur_mt;
 
-    void reset();
-    bool next_line(bool allow_stops = true);
+    std::vector<std::pair<uint16_t, uint16_t>> table_of_content;
 
+    bool next_line(bool allow_stops = true);
     double get_number(char i);
 
     class Sentinel {}; Sentinel skip; // to perform skipping values
@@ -103,6 +103,10 @@ public:
     EndfFile(const std::string& fname): is_open(false), eof(false), line_number(0) {open(fname);}
 
     void open(const std::string& fname);
+    void close();
+    void reset();
+
+    std::vector<std::pair<uint16_t, uint16_t>>& get_table_of_content();
     std::unique_ptr<EndfData> get_section(unsigned int mf, unsigned int mt);
 };
 

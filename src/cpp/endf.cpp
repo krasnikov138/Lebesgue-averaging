@@ -6,9 +6,18 @@ void EndfFile::open(const std::string& fname) {
         is_open = true;
     else
         throw std::runtime_error("Can't open endf file.");
+    table_of_content.clear();
+}
+
+void EndfFile::close() {
+    if (is_open) {
+        pfile.close();
+        is_open = false;
+    }
 }
 
 void EndfFile::reset() {
+    pfile.clear();
     pfile.seekg(0);
     eof = false;
 }
@@ -26,7 +35,7 @@ bool EndfFile::next_line(bool allow_stops) {
 }
 
 double EndfFile::get_number(char i) {
-    if (eof | i > 5 | i < 0)
+    if (eof || i > 5 || i < 0)
         throw std::runtime_error("Endf parsing error, line: " + std::to_string(line_number));
     std::string snum = line.substr(i * 11, 11);
     // check empty string
@@ -36,7 +45,7 @@ double EndfFile::get_number(char i) {
 
     double value;
     auto pos = snum.find_last_of("-+");
-    if (pos == std::string::npos | pos == 0)
+    if (pos == std::string::npos || pos == 0)
         value = std::stod(snum);
     else {
         value = std::stod(snum.substr(0, pos));
@@ -143,6 +152,23 @@ void EndfFile::read(SecondaryEnergyTab& data){
     }
 }
 
+std::vector<std::pair<uint16_t, uint16_t>>& EndfFile::get_table_of_content() {
+    if (!table_of_content.size()) {
+        std::pair<uint16_t, uint16_t> prev;
+        do {
+            next_line();
+            if (cur_mf == 0 || cur_mt == 0)
+                continue;
+            if (cur_mf != prev.first || cur_mt != prev.second) {
+                prev = std::make_pair(cur_mf, cur_mt);
+                table_of_content.push_back(prev);
+            }
+        } while (!eof);
+    }
+    reset();
+    return table_of_content;
+}
+
 std::unique_ptr<EndfData> EndfFile::get_section(unsigned int mf, unsigned int mt) {
     if (!is_open)
         throw std::runtime_error("File isn't opened.");
@@ -150,21 +176,24 @@ std::unique_ptr<EndfData> EndfFile::get_section(unsigned int mf, unsigned int mt
         throw std::runtime_error("Sections 3 and 6 are only supported.");
     do {
         next_line();
-    } while (!eof && (cur_mf == 0 || cur_mf < mf));
-    if (eof || cur_mf > mf) {
-        std::cout << "Can't find given MF in file." << std::endl;
-        return {};
+    } while (!eof && ((cur_mf < mf) || ((cur_mf == mf) && (cur_mt < mt))));
+    if (eof || cur_mf != mf || cur_mt != mt) {
+        reset();
+        throw std::runtime_error("Can't find given section in file.");
     }
 
+    std::unique_ptr<EndfData> result;
     if (mf == 3) {
         auto data = new CrossSectionData();
         read(*data);
-        return std::unique_ptr<EndfData>(data);
+        result = std::unique_ptr<EndfData>(data);
     } else if (mf == 6) {
         auto data = new EnergyAngleData();
         read(*data);
-        return std::unique_ptr<EndfData>(data);
+        result = std::unique_ptr<EndfData>(data);
     }
+    reset();
+    return result;
 }
 
 std::ostream& operator<<(std::ostream& out, const CrossSectionData& obj) {
