@@ -33,11 +33,8 @@ std::vector<Spectrum> load_spectra(const std::string& config_name) {
 void load_distribution(const std::string& fname) {
     EndfFile endf(fname);
 
-    std::unique_ptr<EndfData> data = endf.get_section(6, 5);
-    if (data) {
-        auto& distr = *(reinterpret_cast<EnergyAngleData*>(data.get()));
-        std::cout << distr;
-    }
+    auto data = std::get<EnergyAngleData>(endf.get_section(6, 5));
+    std::cout << data;
     exit(0);
 }
 
@@ -80,10 +77,10 @@ int main(int argc, char** argv) {
     if (config_arg)
         config_name = args::get(config_arg);
 
-    /*
-    if (distr_fname_arg)
+    if (distr_fname_arg) {
         load_distribution(args::get(distr_fname_arg));
-    */
+        return 0;
+    }
 
     auto spectra = load_spectra(config_name);
     set_union_grid(spectra);

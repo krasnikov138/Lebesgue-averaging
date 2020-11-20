@@ -6,6 +6,7 @@
 #include <cmath>
 #include <type_traits>
 #include <algorithm>
+#include <variant>
 
 #ifndef ENDF
 #define ENDF
@@ -20,6 +21,13 @@ public:
     virtual ~EndfData() = default;
 };
 
+struct InterpolationTable {
+    std::vector<size_t> boundaries;
+    std::vector<unsigned char> interpolation_types;
+
+    std::vector<double> xs, ys;
+};
+
 struct CrossSectionData: public EndfData {
     // metainfo
     float za, awr;
@@ -28,50 +36,48 @@ struct CrossSectionData: public EndfData {
     // break up flag
     unsigned char lr;
 
-    // interpolation info
-    unsigned int np;
-    unsigned char int_type;
-
-    std::vector<double> energies;
-    std::vector<double> cross_sections;
+    InterpolationTable cs;
 
     CrossSectionData(): EndfData("cross sections") {};
 };
 
-struct SecondaryEnergyTab {
-    unsigned char na;
-    unsigned int nd, nep;
+struct ContinuumDistribution {
+    unsigned char angular_repr, lep;
 
-    std::vector<double> secondary_energies;
-    std::vector<std::vector<double>> coefs;
+    std::vector<double> primary_energies;
+    std::vector<size_t> discrete_energies;
+
+    // interpolation parameters
+    std::vector<size_t> boundaries;
+    std::vector<unsigned char> interpolation_types;
+
+    std::vector<std::vector<double>> secondary_energies;
+    std::vector<std::vector<std::vector<double>>> coefs;
 };
 
-struct ContinuumSubsection {
+struct ProductSubsection {
     // information about reaction product
-    float zap, awp;
-    unsigned char lip;
-    // interpolation parameters
+    float ZAP, atomic_weight_ratio;
+    unsigned char product_modifier_flag;
+
+    // distribution law (continuum only supported = 1)
     int law;
-    unsigned char lang, lep, int_type_primary, int_type_secondary;
-    unsigned int np, ne;
 
-    std::vector<double> yields;
-    std::vector<double> primary_energies;
-
-    std::vector<SecondaryEnergyTab> distribution;
+    InterpolationTable energy_yield;
+    ContinuumDistribution distr;
 };
 
 struct EnergyAngleData : public EndfData {
     // metainfo
-    float za, awr;
-    unsigned char jp, lct;
+    float ZA, atomic_weight_ratio;
+    unsigned char yield_multiplicity_flag, reference_frame;
 
-    std::vector<ContinuumSubsection> subsections;
+    std::vector<ProductSubsection> subsections;
     EnergyAngleData(): EndfData("energy-angle distr") {};
 };
 
-std::ostream& operator<<(std::ostream& out, const CrossSectionData& obj);
-std::ostream& operator<<(std::ostream& out, const ContinuumSubsection& obj);
+//std::ostream& operator<<(std::ostream& out, const CrossSectionData& obj);
+std::ostream& operator<<(std::ostream& out, const ProductSubsection& obj);
 std::ostream& operator<<(std::ostream& out, const EnergyAngleData& obj);
 
 class EndfFile {
@@ -86,7 +92,8 @@ class EndfFile {
     std::vector<std::pair<uint16_t, uint16_t>> table_of_content;
 
     bool next_line(bool allow_stops = true);
-    double get_number(char i);
+    template<typename T = double>
+    T get_number(char i);
 
     class Sentinel {}; Sentinel skip; // to perform skipping values
     template<typename T, typename... Ts>
@@ -94,9 +101,13 @@ class EndfFile {
     template<typename... Ts>
     void get_numbers(Ts&... args);
 
+    template<typename FirstType, typename SecondType>
+    void load_relationship(size_t size, std::vector<FirstType>& seq1, std::vector<SecondType>& seq2);
+
+    void read(InterpolationTable& data);
     void read(CrossSectionData& data);
-    void read(SecondaryEnergyTab& data);
-    void read(ContinuumSubsection& section);
+    void read(ContinuumDistribution& data);
+    void read(ProductSubsection& section);
     void read(EnergyAngleData& distr);
 public:
     EndfFile() noexcept: is_open(false), eof(false), line_number(0) {};
@@ -107,7 +118,7 @@ public:
     void reset();
 
     std::vector<std::pair<uint16_t, uint16_t>>& get_table_of_content();
-    std::unique_ptr<EndfData> get_section(unsigned int mf, unsigned int mt);
+    std::variant<CrossSectionData, EnergyAngleData> get_section(unsigned int mf, unsigned int mt);
 };
 
 #endif

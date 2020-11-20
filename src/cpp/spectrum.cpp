@@ -71,14 +71,7 @@ LinearGrid linspace(double left, double right, size_t points) {
 
 void Spectrum::load(const std::string& file_name) {
     EndfFile endf(file_name);
-
-    std::unique_ptr<EndfData> data = endf.get_section(3, 1);
-    if (data) {
-        auto& spectr = *(reinterpret_cast<CrossSectionData*>(data.get()));
-        load(std::move(spectr));
-    } else
-        throw std::runtime_error("File '" + file_name + 
-            "'' doesn't contain total cross section part.");
+    load(std::get<CrossSectionData>(endf.get_section(3, 1)));
 }
 
 void Spectrum::load(CrossSectionData&& endf_data) {

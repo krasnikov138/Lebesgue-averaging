@@ -14,6 +14,23 @@ py::array_t<typename Sequence::value_type> move_to_np(Sequence&& seq) {
     return py::array(seq_ptr->size(), seq_ptr->data(), capsule);
 }
 
+template<template<typename> class Seq, typename T>
+py::array_t<T> copy2d_to_np(const Seq<Seq<T>>& obj) {
+    if (!obj.size())
+        return {};
+
+    size_t N = obj.size();
+    size_t M = obj[0].size();
+
+    auto copy = py::array_t<T>(N * M);
+    T *ptr = static_cast<T*>(copy.request().ptr);
+    for (int i = 0; i < N; ++i)
+        std::copy(obj[i].cbegin(), obj[i].cend(), ptr + i * M);
+    copy.resize({(int) N, (int) M});
+
+    return copy;
+}
+
 std::string int_schema(unsigned char int_type) {
 	const static std::vector<std::string> prefixes = {
 		"", "corresponding_points_", "unit_base_"
@@ -24,43 +41,86 @@ std::string int_schema(unsigned char int_type) {
 	return prefixes[int_type / 10] + schemas[int_type % 10 - 1];
 }
 
-struct PyCrossSectionData {
-    float za, awr;
-    double qm, qi;
-    unsigned char lr;
+struct PyInterpolationTable {
+    py::array_t<size_t> boundaries;
+    py::array_t<unsigned char> interpolation_types;
 
-    unsigned int np;
-    unsigned char int_type;
+    py::array_t<double> xs, ys;
 
-    py::array_t<double> energies;
-    py::array_t<double> cross_sections;
-
-	PyCrossSectionData(CrossSectionData&& cdata) {
-		za = cdata.za;
-		awr = cdata.awr;
-		lr = cdata.lr;
-		qm = cdata.qm;
-		qi = cdata.qi;
-		int_type = cdata.int_type;
-
-		energies = move_to_np(std::move(cdata.energies));
-		cross_sections = move_to_np(std::move(cdata.cross_sections));
-	}
-
-	std::string interpolation_type() const {
-		return int_schema(int_type);
-	}
-
-	std::string to_string() const {
-		std::stringstream buf;
-		buf << "ENDF cross section data object\n";
-		buf << "Material charge and mass parameters ZA=" << za << ", mass=" << awr << '\n';
-    	buf << "Mass differences QM=" << qm << ", QI=" << qi << '\n';
-    	buf << "Breakup flag LR=" << (int)lr << '\n';
-    	buf << "Interpolation type: " << interpolation_type();
-    	return buf.str();
-	}
+    PyInterpolationTable(InterpolationTable&& obj) {
+        boundaries = move_to_np(std::move(obj.boundaries));
+        interpolation_types = move_to_np(std::move(obj.interpolation_types));
+        xs = move_to_np(std::move(obj.xs));
+        ys = move_to_np(std::move(obj.ys));
+    }
 };
+
+py::dict cross_section_to_py(CrossSectionData&& obj) {
+    py::dict data;
+
+    data["za"] = obj.za;
+    data["awr"] = obj.awr;
+    data["lr"] = obj.lr;
+    data["qm"] = obj.qm;
+    data["qi"] = obj.qi;
+    data["cs"] = PyInterpolationTable(std::move(obj.cs));
+
+    return data;
+}
+
+py::dict continuum_distribution_to_py(ContinuumDistribution&& obj) {
+    py::dict data;
+
+    data["angular_repr"] = obj.angular_repr;
+    data["lep"] = obj.lep;
+
+    data["primary_energies"] = move_to_np(std::move(obj.primary_energies));
+    data["discrete_energies"] = move_to_np(std::move(obj.discrete_energies));
+    data["boundaries"] = move_to_np(std::move(obj.boundaries));
+    data["interpolation_types"] = move_to_np(std::move(obj.interpolation_types));
+
+    py::list secondary_energies, coefs;
+    for (auto& el: obj.secondary_energies)
+        secondary_energies.append(move_to_np(std::move(el)));
+
+    for (auto& el: obj.coefs)
+        coefs.append(copy2d_to_np(el));
+
+    data["secondary_energies"] = secondary_energies;
+    data["coefs"] = coefs;
+
+    return data;
+}
+
+py::dict product_subsection_to_py(ProductSubsection&& obj) {
+    py::dict data;
+
+    data["ZAP"] = obj.ZAP;
+    data["atomic_weight_ratio"] = obj.atomic_weight_ratio;
+    data["product_modifier_flag"] = obj.product_modifier_flag;
+    data["law"] = obj.law;
+
+    data["energy_yield"] = PyInterpolationTable(std::move(obj.energy_yield));
+    data["distr"] = continuum_distribution_to_py(std::move(obj.distr));
+
+    return data;
+}
+
+py::dict energy_angle_to_py(EnergyAngleData&& obj) {
+    py::dict data;
+
+    data["ZA"] = obj.ZA;
+    data["atomic_weight_ratio"] = obj.atomic_weight_ratio;
+    data["yield_multiplicity_flag"] = obj.yield_multiplicity_flag;
+    data["reference_frame"] = obj.reference_frame;
+
+    py::list subsections;
+    for (auto& subsection: obj.subsections)
+        subsections.append(product_subsection_to_py(std::move(subsection)));
+    data["subsections"] = subsections;
+
+    return data;
+}
 
 class PyEndfFile {
     EndfFile endf;
@@ -94,26 +154,23 @@ public:
     	return content;
     }
 
-    PyCrossSectionData get_cross_section(unsigned int mt) {
-    	std::unique_ptr<EndfData> data = endf.get_section(3, mt);
-    	auto cs_data_ptr = reinterpret_cast<CrossSectionData*>(data.release());
-    	PyCrossSectionData result(std::move(*cs_data_ptr));
-    	return result;
+    py::dict get_cross_section(unsigned int mt) {
+    	auto data = std::get<CrossSectionData>(endf.get_section(3, mt));
+    	return cross_section_to_py(std::move(data));
     }
-    // std::unique_ptr<EndfData> get_section(unsigned int mf, unsigned int mt);
+
+    py::dict get_energy_angle() {
+        auto data = std::get<EnergyAngleData>(endf.get_section(6, 5));
+        return energy_angle_to_py(std::move(data));
+    }
 };
 
 PYBIND11_MODULE(bindings, m) {
-	py::class_<PyCrossSectionData>(m, "PyCrossSectionData")
-		.def_readonly("za", &PyCrossSectionData::za)
-		.def_readonly("awr", &PyCrossSectionData::awr)
-		.def_readonly("lr", &PyCrossSectionData::lr)
-		.def_readonly("qm", &PyCrossSectionData::qm)
-		.def_readonly("qi", &PyCrossSectionData::qi)
-		.def_readonly("energies", &PyCrossSectionData::energies)
-		.def_readonly("cross_sections", &PyCrossSectionData::cross_sections)
-		.def_property("interpolation_type", &PyCrossSectionData::interpolation_type, nullptr)
-		.def("__repr__", &PyCrossSectionData::to_string);
+    py::class_<PyInterpolationTable>(m, "PyInterpolationTable")
+        .def_readonly("boundaries", &PyInterpolationTable::boundaries)
+        .def_readonly("interpolation_types", &PyInterpolationTable::interpolation_types)
+        .def_readonly("xs", &PyInterpolationTable::xs)
+        .def_readonly("ys", &PyInterpolationTable::ys);
 
     py::class_<PyEndfFile>(m, "PyEndfFile")
     	.def(py::init<>())
@@ -121,6 +178,7 @@ PYBIND11_MODULE(bindings, m) {
         .def("open", &PyEndfFile::open)
         .def("close", &PyEndfFile::close)
         .def_property("table_of_content", &PyEndfFile::table_of_content, nullptr)
-        .def("get_cross_section", &PyEndfFile::get_cross_section);
+        .def("get_cross_section", &PyEndfFile::get_cross_section)
+        .def("get_energy_angle", &PyEndfFile::get_energy_angle);
 }
 
