@@ -3,6 +3,8 @@
 #include <pybind11/numpy.h>
 #include <sstream>
 #include "endf.h"
+#include "measure.h"
+#include "resonances.h"
 
 namespace py = pybind11;
 using namespace py::literals;
@@ -165,6 +167,94 @@ public:
     }
 };
 
+class Research {
+    std::vector<Spectrum> spectra;
+    std::vector<std::vector<Carrier>> carriers;
+    std::vector<std::vector<Measure>> measures;
+
+    std::unordered_map<std::string, size_t> name_mapping;
+
+    void load_spectra(py::dict config) {
+        size_t ptr = 0;
+        spectra.clear();
+        for (auto& [name, values]: config) {
+            std::string cname = py::cast<std::string>(name);
+            name_mapping[cname] = ptr++;
+            std::string cross_section_file = py::cast<std::string>(values["cross_section_file"]);
+            double concentration = py::cast<double>(values["concentration"]);
+
+            Spectrum sp(concentration);
+            sp.load(cross_section_file);
+            spectra.push_back(sp);
+        }
+    }
+
+    size_t get_idx(const std::string& material) const {
+        auto it = name_mapping.find(material);
+        if (it != name_mapping.cend())
+            return it->second;
+        throw std::length_error("Material doesn't exist.");
+    }
+public:
+    Research(py::dict config, double K, double start_energy) {
+        load_spectra(config);
+        set_union_grid(spectra);
+        carriers = build_carriers(spectra, start_energy, K);
+
+        for (size_t i = 0; i < spectra.size(); ++i) {
+            std::vector<Measure> mat_measures;
+            for (size_t j = 0; j < carriers[i].size(); ++j)
+                mat_measures.push_back(Measure(spectra[i], carriers[i][j]));
+            measures.push_back(std::move(mat_measures));
+        }
+    }
+
+    size_t get_carriers_number(const std::string& material) const {
+        return carriers[get_idx(material)].size();
+    }
+
+    double measures_min_cs(const std::string& material, size_t idx) const {
+        return measures[get_idx(material)][idx].min_cs();
+    }
+
+    double measures_max_cs(const std::string& material, size_t idx) const {
+        return measures[get_idx(material)][idx].max_cs();
+    }
+
+    py::array_t<double> measures_calculate(
+        const std::string& material, size_t idx, py::array_t<double> cs_points) const {
+        const auto& mes = measures[get_idx(material)][idx];
+
+        std::vector<double> points = py::cast<std::vector<double>>(cs_points);
+        LinearGrid grid;
+        grid = std::move(points);
+        return move_to_np(mes.calculate(grid));
+    }
+
+    double measures_call(const std::string& material, size_t idx, double cs) const {
+        const auto& mes = measures[get_idx(material)][idx];
+        return mes(cs);
+    }
+
+    py::array_t<double> measures_optimal_grid_exp(
+        const std::string& material, size_t idx, size_t nodes, double char_length) const {
+        const auto& mes = measures[get_idx(material)][idx];
+        return move_to_np(mes.optimal_grid_exp(nodes, char_length));
+    }
+
+    py::array_t<double> measures_optimal_grid_rational(
+        const std::string& material, size_t idx, size_t nodes, double char_length) const {
+        const auto& mes = measures[get_idx(material)][idx];
+        return move_to_np(std::move(mes.optimal_grid_rational(nodes, char_length)));
+    }
+
+    py::tuple measures_const_section_params(const std::string& material, size_t idx, double cs) const {
+        const auto& mes = measures[get_idx(material)][idx];
+        auto params = mes.const_section_params(cs);
+        return py::make_tuple(move_to_np(std::move(params.first)), move_to_np(std::move(params.second)));
+    }
+};
+
 PYBIND11_MODULE(bindings, m) {
     py::class_<PyInterpolationTable>(m, "PyInterpolationTable")
         .def_readonly("boundaries", &PyInterpolationTable::boundaries)
@@ -180,5 +270,16 @@ PYBIND11_MODULE(bindings, m) {
         .def_property("table_of_content", &PyEndfFile::table_of_content, nullptr)
         .def("get_cross_section", &PyEndfFile::get_cross_section)
         .def("get_energy_angle", &PyEndfFile::get_energy_angle);
+
+    py::class_<Research>(m, "Research")
+        .def(py::init<py::dict, double, double>())
+        .def("get_carriers_number", &Research::get_carriers_number)
+        .def("measures_min_cs", &Research::measures_min_cs)
+        .def("measures_max_cs", &Research::measures_max_cs)
+        .def("measures_calculate", &Research::measures_calculate)
+        .def("measures_call", &Research::measures_call)
+        .def("measures_optimal_grid_exp", &Research::measures_optimal_grid_exp)
+        .def("measures_optimal_grid_rational", &Research::measures_optimal_grid_rational)
+        .def("measures_const_section_params", &Research::measures_const_section_params);
 }
 

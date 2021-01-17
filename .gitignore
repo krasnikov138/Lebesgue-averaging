@@ -1,3 +1,4 @@
+data
 run/*
 !run/*.cpp
 !run/*.py

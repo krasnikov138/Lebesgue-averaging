@@ -26,6 +26,10 @@ struct InterpolationTable {
     std::vector<unsigned char> interpolation_types;
 
     std::vector<double> xs, ys;
+
+    bool is_linear() {
+        return (interpolation_types.size() == 1 && interpolation_types[0] == 2);
+    };
 };
 
 struct CrossSectionData: public EndfData {
@@ -39,6 +43,9 @@ struct CrossSectionData: public EndfData {
     InterpolationTable cs;
 
     CrossSectionData(): EndfData("cross sections") {};
+    inline bool is_linear() {
+        return cs.is_linear();
+    }
 };
 
 struct ContinuumDistribution {

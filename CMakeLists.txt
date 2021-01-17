@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.0)
 add_definitions("--std=c++17 -DASIO_STANDALONE")
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "-O3 -Wall -Wextra -pthread")
+set(CMAKE_CXX_FLAGS "-O3 -pthread")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/run)
 
 if (NOT PYTHON_EXECUTABLE)
@@ -25,6 +25,13 @@ if (NOT PYTHON_EXECUTABLE)
     target_link_libraries(main PRIVATE yaml-cpp)
 else()
     add_subdirectory(libs/pybind11)
-    pybind11_add_module(bindings src/cpp/bindings.cpp src/cpp/endf.cpp)
+    set(SOURCES
+        src/cpp/bindings.cpp
+        src/cpp/endf.cpp
+        src/cpp/measure.cpp
+        src/cpp/resonances.cpp
+        src/cpp/spectrum.cpp
+    )
+    pybind11_add_module(bindings ${SOURCES})
     target_link_libraries(bindings PRIVATE pybind11::module)
 endif()

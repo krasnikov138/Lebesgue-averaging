@@ -30,9 +30,9 @@ double LinearGrid::get_value(double point) const {
     return ratio * (*this)[i + 1] + (1 - ratio) * (*this)[i];
 }
 
-double LinearGrid::get_point(double value, std::optional<unsigned int> hint) const {
+double LinearGrid::get_point(double value, std::optional<int> hint) const {
     double point;
-    unsigned int i;
+    int i;
     if (!hint.has_value()) {
         // find point using binary search
         auto bound = std::lower_bound(begin(), end(), value);
@@ -43,19 +43,10 @@ double LinearGrid::get_point(double value, std::optional<unsigned int> hint) con
     } else 
         i = hint.value();
     point = i;
+    if (i < 0) return point;
     if (i + 1 < size())
         point += (value - (*this)[i]) / ((*this)[i + 1] - (*this)[i]);
     return point;
-}
-
-LinearGrid& LinearGrid::operator=(const std::vector<double>& obj) {
-    std::vector<double>::operator=(obj);
-    return *this;
-}
-
-LinearGrid& LinearGrid::operator=(std::vector<double>&& obj) {
-    std::vector<double>::operator=(std::move(obj));
-    return *this;
 }
 
 LinearGrid linspace(double left, double right, size_t points) {
@@ -69,14 +60,21 @@ LinearGrid linspace(double left, double right, size_t points) {
     return grid;
 }
 
-void Spectrum::load(const std::string& file_name) {
+Spectrum::Spectrum(const std::vector<double>& xs, const std::vector<double>& ys):
+    concentration(1.0) {
+    if (xs.size() != ys.size())
+        throw std::runtime_error("Not equal size of input vectors.");
+    e = xs; cs = ys; size = xs.size();
+}
+
+void Spectrum::load(const std::string& file_name, int mt) {
     EndfFile endf(file_name);
-    load(std::get<CrossSectionData>(endf.get_section(3, 1)));
+    load(std::get<CrossSectionData>(endf.get_section(3, mt)));
 }
 
 void Spectrum::load(CrossSectionData&& endf_data) {
-    e = std::move(endf_data.energies);
-    cs = std::move(endf_data.cross_sections);
+    e = std::move(endf_data.cs.xs);
+    cs = std::move(endf_data.cs.ys);
 
     for (auto& el: cs)
         el *= concentration;
@@ -117,4 +115,16 @@ double Spectrum::resonance_begin(double threshold, int use_points) const {
         i++;
     }
     return e[i];
+}
+
+Spectrum reactions_sum(const std::vector<Spectrum>& reactions) {
+    Spectrum result;
+    result.e = reactions[0].e;
+    result.size = reactions[0].size;
+    result.cs.resize(result.size);
+    for (auto& reaction: reactions) {
+        for (size_t i = 0; i < reaction.size; ++i)
+            result.cs[i] += reaction.cs[i];
+    }
+    return result;
 }
